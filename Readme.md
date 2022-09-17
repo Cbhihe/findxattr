@@ -128,4 +128,4 @@ The script produces a tab-separated output, e.g.:
     ./fully/qualified/_2_path/foobar     filebirth        20210330-185430-CEST
 
 ### Issues
-    If you experience issues with this scripts,i do not write an email to me. Instead,  please, open an issue in this Gibthub repo.
+If you experience issues with this script, do not write an email to me. Instead, please open an issue in this Gibthub repo.
