@@ -127,3 +127,5 @@ The script produces a tab-separated output, e.g.:
     ./fully/qualified/_1_path/bar        filebirth        20220627-193029-CEST
     ./fully/qualified/_2_path/foobar     filebirth        20210330-185430-CEST
 
+### Issues
+    If you experience issues with this scripts,i do not write an email to me. Instead,  please, open an issue in this Gibthub repo.
