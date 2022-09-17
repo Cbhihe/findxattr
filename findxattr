@@ -1,0 +1,194 @@
+#!/usr/bin/sh
+
+#-------------------------------------------------------------
+# Author: Cedric Bhihe
+# Copyright (c) 2022 Cedric K. Bhihe. All rights reserved.
+# Created: Mon 20 Jun 2022 14:02:51 CEST
+# Last edit: Tue 28 Jun 2022 08:38:10 CEST
+#-------------------------------------------------------------
+
+version='0.5.0'
+
+set -o posix
+#set -x
+
+getopt_parsed=$(getopt -q -s sh -a -l 'all,help,path:,xattr:,maxdepth:' -o '+ham:p:x:' -- "$@")
+exit_code=$?
+if [ $exit_code -ne 0 ]; then
+    printf "getopt exited with code %d (%s).\n%s\n" $exit_code "getopt parsing error"\
+    "The most probable cause is an unknown option. Review command usage with \`findxattr -h|--help'" >&2
+    exit 1
+fi
+
+eval set -- "$getopt_parsed"
+unset getopt_parsed
+
+xattrkey=""
+xattrval=""
+
+while true; do
+
+    case "$1" in
+        '-a'|'--all')
+            /usr/bin/find . -exec sh -c '
+                while IFS= read -r xattrkey; do
+                    xattrvalout=`/usr/bin/attr -qg "$xattrkey" "$1" 2>/dev/null`
+                    printf "%-20s\t%-20s\t%s\n" "$1" "$xattrkey" "$xattrvalout"
+                done < <(/usr/bin/attr -ql "$1" 2>/dev/null)
+            ' sh_exec "{}" \; 2>/dev/null
+            exit 0
+        ;;
+
+        '-m'|'--maxdepth'|'--md'|'--maxd')
+            tmp=`expr "$2" + 0`
+            if (( "$2" == "$tmp" )); then
+                maxdepth="$2"
+                shift 2
+                continue
+            else
+                printf "The script exited because '--maxdepth' arg must be a positive integer; current arg is %s.\n%s\n" "$2" "Review command usage with \`findxattr -h|--help'" >&2
+                exit 1
+            fi
+        ;;
+
+        '-p'|'--path')
+            locpath="$2"
+            #if [ "$locpath" = "\(/*[^/]\+\)\+/$" ]; then
+            #if expr "$locpath" : "^\(/*\([^/]\)\+\)\+$" >/dev/null; then
+            if expr "$locpath" : "^\(/*[^/]\+\)\+$" >/dev/null; then
+                shift 2
+                continue
+            else
+                printf "The script exited because '--path' arg must be a valid path; current arg is %s.\n%s\n" "$2" "Review command usage with \`findxattr -h|--help'" >&2
+                exit 1
+            fi
+        ;;
+
+        '-x'|'--xattr')
+            keyval="$2"
+            found=1
+            if [ "$keyval" != "${keyval%==*}" ]; then
+                found=0
+            fi
+
+            if [ "$found" = "1" ]; then
+                printf "The script exited because '-x|--xattr' arg appears to be either empty or malformed.\nReview command usage with \`findxattr -h|--help'. Remember that extended attributes\ncan be sought by key AND value (<key>==<value>), or only by key (<key>==), or only by value\n(==<value>), where in each case the parenthesized content represents the '-x' option's argument.\n" >&2
+                exit 1
+            else
+                xattrkey="${keyval%==*}"
+                xattrval="${keyval#*==}"
+                shift 2
+                continue
+            fi
+        ;;
+
+        '-h'|'--help')
+            printf "%s\n" " " "This is a script based on \`find' but restricted to the options shown below. Both short- and long-" \
+"format options are allowed. Unknown options cause the script to abort with exit code 1." \
+" " \
+"Usage:" \
+"   \`findattr -h|--help' Prints this usage information. This option is used alone." \
+"   \`findattr -a|--all'  Searches recursively for all files with xattr(s) starting at \$PWD." \
+"                        This option is used alone." \
+"   \`findattr [-m|maxdepth <d>] [-p|path <path>] [-x|xattr <xattr_name>==<xattr_value>]'" \
+"       Options that can be combined:" \
+"         -m|--maxdepth  Identical to \`find -maxdepth <d>' option, where \`d' a positive integer;" \
+"                        Limits any recursive search with \`find', to the specified level of the file tree." \
+"                        Note that the level of the file tree is understood counting from \$PWD, NOT" \
+"                        from a supposed start point represented by the \`--path' argument if present." \
+"         -p|--path      Identical to \`find -path <spath>' option;" \
+"                        Traverse the file tree from the specified path, searching for ANY xattr," \
+"                        unless the \`--xattr' option is invoked to filter the search so a specific xattr" \
+"                        name and value can be sought." \
+"         -x|--xattr     Lists files with specified \`xattr', n the file tree starting at \$PWD unless" \
+"                        \`--path' is invoked." \
+"                        A compulsory argument of the form: '<xattr_name>==<xattr_value>' is expected." \
+"                        Quoting is needed in case the argument contains space(s) or special characters." \
+" "
+            exit 0
+        ;;
+
+        '--')
+            shift
+            break
+        ;;
+
+        *)
+            printf "%s\n" "Internal error. Abort." >&2
+            exit 1
+        ;;
+
+    esac
+done
+
+if [ -n "$maxdepth"  ] && [ -n "$locpath" ]; then
+    set -- -maxdepth "$maxdepth" -path "$locpath"
+elif [ -z "$maxdepth"  ] && [ -n "$locpath" ]; then
+    set -- -path "$locpath"
+elif [ -z "$maxdepth"  ] && [ -z "$locpath" ]; then
+    set --
+else
+    #[ -n "$maxdepth"  ] && [ -z "$locpath" ]
+    set -- -maxdepth "$maxdepth"
+fi
+
+if [ -n "$xattrkey" ] && [ -n "$xattrval" ]; then
+#if expr "$xattrkey" != "" >/dev/null && expr "$xattrval" != "" >/dev/null; then
+    xattrkey="$xattrkey" xattrval="$xattrval" /usr/bin/find . "$@" -exec sh -c '
+        xattrvalout=`/usr/bin/attr -qg "$xattrkey" "$1" 2>/dev/null`
+        if [ "$xattrvalout" = "$xattrval" ]; then
+        #if expr "$xattrvalout" = "$xattrval" >/dev/null; then
+            printf "%-20s\t%-20s\t%s\n" "$1" "$xattrkey" "$xattrvalout"
+        fi
+    ' sh_exec "{}" \; 2>/dev/null
+
+elif [ -n "$xattrkey" ] && [ -z "$xattrval" ]; then
+#elif expr "$xattrkey" != "" >/dev/null && expr "$xattrval" = "" >/dev/null; then
+    xattrkey="$xattrkey" xattrval="$xattrval" /usr/bin/find . "$@" -exec sh -c '
+        xattrvalout=`/usr/bin/attr -qg "$xattrkey" "$1" 2>/dev/null`
+        if [ -n "$xattrvalout" ]; then
+            while IFS= read -r xattrvalout || [ -n "$xattrvalout" ]; do
+                printf "%-20s\t%-20s\t%s\n" "$1" "$xattrkey" "$xattrvalout"
+            done <<<"$xattrvalout"
+        fi
+    ' sh_exec "{}" \; 2>/dev/null
+
+elif [ -z "$xattrkey" ] && [ -z "$xattrval" ]; then
+#elif expr "$xattrkey" = "" >/dev/null && expr "$xattrval" = "" >/dev/null; then
+    #xattrkey="$xattrkey" xattrval="$xattrval"
+    /usr/bin/find . "$@" -exec sh -c '
+        xattrkeys=`/usr/bin/attr -ql "$1" 2>/dev/null`
+        if [ -n "$xattrkeys" ]; then
+            while IFS= read -r xattrkey || [ -n "$xattrkey" ]; do
+                xattrvalouts=`/usr/bin/attr -qg "$xattrkey" "$1" 2>/dev/null`
+                if [ -n "$xattrvalouts" ]; then
+                    while IFS= read -r xattrvalout || [ -n "$xattrvalout" ]; do
+                        printf "%-20s\t%-20s\t%s\n" "$1" "$xattrkey" "$xattrvalout"
+                    done <<<"$xattrvalouts"
+                fi
+            done <<<"$xattrkeys"
+        fi
+    ' sh_exec "{}" \; 2>/dev/null
+
+else
+    # [ -z "$xattrkey" ] && [ -n "$xattrval" ]; then
+    # expr "$xattrkey" = "" >/dev/null && expr "$xattrval" != "" >/dev/null
+    xattrkey="$xattrkey" xattrval="$xattrval" /usr/bin/find . "$@" -exec sh -c '
+        xattrkeys=`/usr/bin/attr -ql "$1" 2>/dev/null`
+        if [ -n "$xattrkeys" ]; then
+            while IFS= read -r xattrkey || [ -n "$xattrkey" ]; do
+                xattrvalouts=`/usr/bin/attr -qg "$xattrkey" "$1" 2>/dev/null`
+                if [ -n "$xattrvalouts" ]; then
+                    while IFS= read -r xattrvalout || [ -n "$xattrvalout" ]; do
+                        if [ "$xattrvalout" = "$xattrval" ]; then
+                            printf "%-20s\t%-20s\t%s\n" "$1" "$xattrkey" "$xattrvalout"
+                        fi
+                    done <<<"$xattrvalouts"
+                fi
+            done <<<"$xattrkeys"
+        fi
+    ' sh_exec "{}" \; 2>/dev/null
+
+fi
+
+exit 0
